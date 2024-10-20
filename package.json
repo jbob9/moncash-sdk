@@ -1,0 +1,25 @@
+{
+  "name": "moncash-sdk",
+  "version": "1.0.0",
+  "description": "A TypeScript SDK for API integration",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "prepublishOnly": "npm run build"
+  },
+  "keywords": [
+    "sdk",
+    "moncash",
+    "api",
+    "typescript"
+  ],
+  "author": "Your Name",
+  "license": "MIT",
+  "files": [
+    "dist"
+  ],
+  "devDependencies": {
+    "typescript": "^5.6.3"
+  }
+}
