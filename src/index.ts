@@ -4,40 +4,68 @@ import {
   TransFerResponse,
 } from "./types";
 
-// Define the MoncashSDK configuration interface
+// Custom error class for MonCash specific errors
+export class MonCashError extends Error {
+  constructor(
+    message: string,
+    public statusCode?: number,
+    public response?: any
+  ) {
+    super(message);
+    this.name = "MonCashError";
+  }
+}
+
+// Configuration interface with additional options
 interface MoncashSDKConfig {
   clientId: string;
   clientSecret: string;
   mode: "live" | "sandbox";
+  maxRetries?: number;
+  timeout?: number;
 }
 
-// Create the main MoncashSDK class
+// API endpoints enum for better maintenance
+enum Endpoints {
+  CREATE_PAYMENT = "/v1/CreatePayment",
+  RETRIEVE_TRANSACTION = "/v1/RetrieveTransactionPayment",
+  RETRIEVE_ORDER = "/v1/RetrieveOrderPayment",
+  TRANSFER = "/v1/TransFer",
+  TOKEN = "/oauth/token",
+}
+
 class MoncashSDK {
-  private config: MoncashSDKConfig;
-  private baseUrl: string;
-  private gatewayUrl: string;
+  private readonly baseUrl: string;
+  private readonly gatewayUrl: string;
+  private readonly maxRetries: number;
+  private readonly timeout: number;
+  private accessToken: string | null = null;
+  private tokenExpiry: number = 0;
 
-  constructor(config: MoncashSDKConfig) {
-    this.config = config;
-    this.baseUrl =
-      config.mode === "live"
-        ? "https://moncashbutton.digicelgroup.com/Api"
-        : "https://sandbox.moncashbutton.digicelgroup.com/Api";
+  constructor(private readonly config: MoncashSDKConfig) {
+    this.maxRetries = config.maxRetries ?? 3;
+    this.timeout = config.timeout ?? 30000;
 
-    this.gatewayUrl =
+    const environment =
       config.mode === "live"
-        ? "https://moncashbutton.digicelgroup.com/Moncash-middleware"
-        : "https://sandbox.moncashbutton.digicelgroup.com/Moncash-middleware";
+        ? "moncashbutton.digicelgroup.com"
+        : "sandbox.moncashbutton.digicelgroup.com";
+    this.baseUrl = `https://${environment}/Api`;
+    this.gatewayUrl = `https://${environment}/Moncash-middleware`;
   }
 
-  // Example method to make an authenticated API call
-  async makeRequest<T>(
+  // Improved request method with retry mechanism and better error handling
+  private async makeRequest<T>(
     endpoint: string,
     method: "GET" | "POST" | "PUT" | "DELETE",
-    data?: any
-  ) {
+    data?: unknown,
+    retryCount = 0
+  ): Promise<T> {
     try {
       const accessToken = await this.getAccessToken();
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), this.timeout);
+
       const response = await fetch(`${this.baseUrl}${endpoint}`, {
         method,
         headers: {
@@ -45,70 +73,104 @@ class MoncashSDK {
           "Content-Type": "application/json",
         },
         body: data ? JSON.stringify(data) : undefined,
+        signal: controller.signal,
       });
 
+      clearTimeout(timeoutId);
+
       if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
+        throw new MonCashError(
+          `Request failed with status ${response.status}`,
+          response.status,
+          await response.json().catch(() => null)
+        );
       }
 
       return (await response.json()) as T;
     } catch (error) {
-      // Handle errors appropriately
-      console.error("API request failed:", error);
-      throw error;
+      if (error instanceof MonCashError) {
+        if (error.statusCode === 401 && retryCount < this.maxRetries) {
+          this.accessToken = null; // Reset token
+          return this.makeRequest<T>(endpoint, method, data, retryCount + 1);
+        }
+        throw error;
+      }
+
+      if (error instanceof Error) {
+        throw new MonCashError(
+          `Request failed: ${error.message}`,
+          undefined,
+          error
+        );
+      }
+
+      throw new MonCashError("Unknown error occurred");
     }
   }
 
-  createPayment(amount: number, orderId: string) {
-    return this.makeRequest<CreatePaymentResponse>(
-      "/v1/CreatePayment",
+  // Improved payment creation with input validation
+  async createPayment(amount: number, orderId: string) {
+    if (amount <= 0) throw new MonCashError("Amount must be greater than 0");
+    if (!orderId.trim()) throw new MonCashError("OrderId is required");
+
+    const response = await this.makeRequest<CreatePaymentResponse>(
+      Endpoints.CREATE_PAYMENT,
       "POST",
-      {
-        amount,
-        orderId,
-      }
-    ).then((response) => {
-      const redirectUrl = `${this.gatewayUrl}/Payment/Redirect?token=${response.payment_token.token}`;
-      return { redirectUrl, paymentToken: response.payment_token.token };
-    });
+      { amount, orderId }
+    );
+
+    return {
+      redirectUrl: `${this.gatewayUrl}/Payment/Redirect?token=${response.payment_token.token}`,
+      paymentToken: response.payment_token.token,
+    };
   }
 
-  getTransaction(transactionId: string) {
-    return this.makeRequest<any>(`/v1/ RetrieveTransactionPayment`, "POST", {
+  async getTransaction(transactionId: string) {
+    if (!transactionId.trim())
+      throw new MonCashError("TransactionId is required");
+
+    return this.makeRequest<any>(Endpoints.RETRIEVE_TRANSACTION, "POST", {
       transactionId,
     });
   }
 
-  getOrder(orderId: string) {
+  async getOrder(orderId: string) {
+    if (!orderId.trim()) throw new MonCashError("OrderId is required");
+
     return this.makeRequest<RetrieveOrderPaymentResponse>(
-      `/v1/RetrieveOrderPayment`,
+      Endpoints.RETRIEVE_ORDER,
       "POST",
-      {
-        orderId,
-      }
+      { orderId }
     );
   }
 
-  transFer(amount: number, receiver: string, description: string) {
-    return this.makeRequest<TransFerResponse>("/v1/TransFer", "POST", {
+  async transFer(amount: number, receiver: string, description: string) {
+    if (amount <= 0) throw new MonCashError("Amount must be greater than 0");
+    if (!receiver.trim()) throw new MonCashError("Receiver is required");
+
+    return this.makeRequest<TransFerResponse>(Endpoints.TRANSFER, "POST", {
       amount,
       receiver,
       description,
     });
   }
 
-  private encodeSecret(secret: string) {
+  private encodeSecret(secret: string): string {
     return btoa(String.fromCharCode(...new TextEncoder().encode(secret)));
   }
 
-  // Method to get an access token (you'll need to implement this based on your API's authentication method)
   private async getAccessToken(): Promise<string> {
+    // Return existing token if it's still valid
+    if (this.accessToken && Date.now() < this.tokenExpiry) {
+      return this.accessToken;
+    }
+
     try {
-      const credentials = btoa(
+      const credentials = this.encodeSecret(
         `${this.config.clientId}:${this.config.clientSecret}`
       );
 
-      const response = await fetch(`${this.baseUrl}/oauth/token`, {
+      const response = await fetch(`${this.baseUrl}${Endpoints.TOKEN}`, {
         method: "POST",
         headers: {
           Authorization: `Basic ${credentials}`,
@@ -119,17 +181,26 @@ class MoncashSDK {
       });
 
       if (!response.ok) {
-        throw new Error(`Authentication failed: ${response.status}`);
+        throw new MonCashError(
+          "Authentication failed",
+          response.status,
+          await response.json().catch(() => null)
+        );
       }
 
       const data = await response.json();
-      return data.access_token;
+      this.accessToken = data.access_token;
+      this.tokenExpiry = Date.now() + data.expires_in * 1000;
+
+      if (!this.accessToken) {
+        throw new MonCashError("Access token is null");
+      }
+      return this.accessToken;
     } catch (error) {
-      console.error("Failed to get access token:", error);
-      throw error;
+      if (error instanceof MonCashError) throw error;
+      throw new MonCashError("Failed to get access token", undefined, error);
     }
   }
 }
 
-// Export the MoncashSDK
 export default MoncashSDK;
