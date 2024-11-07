@@ -1,7 +1,7 @@
 {
   "name": "moncash-sdk",
   "version": "1.0.0",
-  "description": "A TypeScript SDK for API integration",
+  "description": "A TypeScript SDK for moncash payment API integration",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "scripts": {
@@ -12,9 +12,11 @@
     "sdk",
     "moncash",
     "api",
+    "sanbox",
+    "payment",
     "typescript"
   ],
-  "author": "Your Name",
+  "author": "jbob9 <berlenskyoliver99@gmail.com>",
   "license": "MIT",
   "files": [
     "dist"
