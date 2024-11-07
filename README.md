@@ -6,9 +6,9 @@ A powerful Node.js/TypeScript SDK for integrating MonCash payment services into 
 - [Installation](#installation)
 - [Prerequisites](#prerequisites)
 - [Setup](#setup)
-- [Publishing](#publishing)
 - [Usage](#usage)
 - [API Reference](#api-reference)
+- [Methods](#methods)
 - [Error Handling](#error-handling)
 
 <!-- ## Installation
