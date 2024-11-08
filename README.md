@@ -8,18 +8,16 @@ A powerful Node.js/TypeScript SDK for integrating MonCash payment services into 
 - [Prerequisites](#prerequisites)
 - [Setup](#setup)
 - [Usage](#usage)
-- [API Reference](#api-reference)
-- [Methods](#methods)
 - [Error Handling](#error-handling)
 - [Features](#robust-features)
 
-<!-- ## Installation
+## Installation
 
 ```bash
 npm install moncash-sdk
 # or
 yarn add moncash-sdk
-``` -->
+```
 
 ## Prerequisites
 
@@ -97,37 +95,6 @@ try {
 }
 ```
 
-## API Reference
-
-### Configuration Options
-
-```typescript
-interface MoncashSDKConfig {
-  clientId: string; // Your MonCash client ID
-  clientSecret: string; // Your MonCash client secret
-  mode: "live" | "sandbox"; // API environment
-  maxRetries?: number; // Maximum retry attempts (default: 3)
-  timeout?: number; // Request timeout in ms (default: 30000)
-}
-```
-
-### Methods
-
-#### createPayment(amount: number, orderId: string)
-
-Creates a new payment request.
-
-#### getTransaction(transactionId: string)
-
-Retrieves transaction details.
-
-#### getOrder(orderId: string)
-
-Retrieves order details.
-
-#### transFer(amount: number, receiver: string, description: string)
-
-Transfers money to another MonCash account.
 
 ## Error Handling
 
@@ -193,31 +160,25 @@ sdk
 
 ## Robust Features
 
-### 1. Error Handling
-- Custom error types for different scenarios
-- Proper error propagation
-- Specific error classes (OrderNotFoundError, PaymentNotFoundError, etc.)
-- Detailed error messages and status codes
-
-### 2. Token Management
+### 1. Token Management
 - Automatic token caching
 - Smart token refresh
 - Expiration handling
 - Efficient request management
 
-### 3. Request Safety
+### 2. Request Safety
 - Timeout handling
 - Retry mechanism
 - Request validation
 - Proper response parsing
 
-### 4. Security
+### 3. Security
 - Secure credential handling
 - Base64 encoding using Buffer
 - Proper authorization headers
 - Sandbox/Production mode support
 
-### 5. Type Safety
+### 4. Type Safety
 - Full TypeScript support
 - Type definitions for all responses
 - Interface definitions for configurations
@@ -262,8 +223,7 @@ This minimizes API calls and improves performance while maintaining security.
 1. Always use environment variables for credentials
 2. Implement proper error handling
 3. Use sandbox mode for testing
-4. Monitor API metrics regularly
-5. Keep the SDK updated to the latest version
+4. Keep the SDK updated to the latest version
 
 ## License
 
