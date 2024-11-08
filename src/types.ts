@@ -11,12 +11,12 @@ export type CreatePaymentResponse = {
 };
 
 export type RetrieveTransactionPaymentResponse = {
-  path: "/v1/RetrieveTransactionPayment";
+  path: "Api/v1/RetrieveTransactionPayment";
   payment: {
     reference: string;
     transaction_id: string;
     cost: number;
-    message: "successful";
+    message: "successful" | 'failed';
     payer: string;
   };
   timestamp: number;
@@ -24,12 +24,12 @@ export type RetrieveTransactionPaymentResponse = {
 };
 
 export type RetrieveOrderPaymentResponse = {
-  path: "/v1/RetrieveOrderPayment";
+  path: "Api/v1/RetrieveOrderPayment";
   payment: {
     reference: string;
     transaction_id: string;
     cost: number;
-    message: "successful";
+    message: "successful" | "failed";
     payer: string;
   };
   timestamp: number;

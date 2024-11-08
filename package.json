@@ -1,12 +1,16 @@
 {
   "name": "moncash-sdk",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "A TypeScript SDK for moncash payment API integration",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "scripts": {
     "build": "tsc",
     "prepublishOnly": "npm run build"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/jbob9/moncash-sdk.git"
   },
   "keywords": [
     "sdk",
@@ -22,6 +26,7 @@
     "dist"
   ],
   "devDependencies": {
+    "@types/node": "^22.9.0",
     "typescript": "^5.6.3"
   }
 }

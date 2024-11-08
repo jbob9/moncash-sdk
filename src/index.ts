@@ -1,6 +1,7 @@
 import {
   CreatePaymentResponse,
   RetrieveOrderPaymentResponse,
+  RetrieveTransactionPaymentResponse,
   TransFerResponse,
 } from "./types";
 
@@ -13,6 +14,27 @@ export class MonCashError extends Error {
   ) {
     super(message);
     this.name = "MonCashError";
+  }
+}
+
+export class RequestTimeoutError extends MonCashError {
+  constructor(message: string = "Request timed out") {
+    super(message, 408);
+    this.name = "RequestTimeoutError";
+  }
+}
+
+export class OrderNotFoundError extends MonCashError {
+  constructor(orderId: string) {
+    super(`Order with ID ${orderId} not found`, 404);
+    this.name = "OrderNotFoundError";
+  }
+}
+
+export class PaymentNotFoundError extends MonCashError {
+  constructor(transactionId: string) {
+    super(`Payment with ID ${transactionId} not found`, 404);
+    this.name = "PaymentNotFoundError";
   }
 }
 
@@ -34,13 +56,17 @@ enum Endpoints {
   TOKEN = "/oauth/token",
 }
 
+interface TokenData {
+  accessToken: string;
+  expiresAt: number;
+}
+
 class MoncashSDK {
   private readonly baseUrl: string;
   private readonly gatewayUrl: string;
   private readonly maxRetries: number;
   private readonly timeout: number;
-  private accessToken: string | null = null;
-  private tokenExpiry: number = 0;
+  private tokenData: TokenData | null = null;
 
   constructor(private readonly config: MoncashSDKConfig) {
     this.maxRetries = config.maxRetries ?? 3;
@@ -71,6 +97,7 @@ class MoncashSDK {
         headers: {
           Authorization: `Bearer ${accessToken}`,
           "Content-Type": "application/json",
+          Accept: "application/json",
         },
         body: data ? JSON.stringify(data) : undefined,
         signal: controller.signal,
@@ -78,33 +105,69 @@ class MoncashSDK {
 
       clearTimeout(timeoutId);
 
+      const responseData = await response.json().catch(() => null);
+
       if (!response.ok) {
+        // Handle specific error cases
+        switch (response.status) {
+          case 404:
+            if (endpoint === Endpoints.RETRIEVE_ORDER) {
+              throw new OrderNotFoundError(
+                (data as { orderId: string }).orderId
+              );
+            }
+            if (endpoint === Endpoints.RETRIEVE_TRANSACTION) {
+              throw new PaymentNotFoundError(
+                (data as { transactionId: string }).transactionId
+              );
+            }
+            break;
+          case 401:
+            if (retryCount < this.maxRetries) {
+              this.tokenData = null;
+              return this.makeRequest<T>(
+                endpoint,
+                method,
+                data,
+                retryCount + 1
+              );
+            }
+            break;
+        }
+
         throw new MonCashError(
-          `Request failed with status ${response.status}`,
+          responseData?.error?.message ||
+            `Request failed with status ${response.status}`,
           response.status,
-          await response.json().catch(() => null)
+          responseData
         );
       }
 
-      return (await response.json()) as T;
+      return responseData as T;
     } catch (error) {
-      if (error instanceof MonCashError) {
+      if (
+        error instanceof MonCashError ||
+        error instanceof OrderNotFoundError ||
+        error instanceof PaymentNotFoundError ||
+        error instanceof RequestTimeoutError
+      ) {
         if (error.statusCode === 401 && retryCount < this.maxRetries) {
-          this.accessToken = null; // Reset token
+          this.tokenData = null; // Reset token
           return this.makeRequest<T>(endpoint, method, data, retryCount + 1);
         }
         throw error;
       }
 
-      if (error instanceof Error) {
-        throw new MonCashError(
-          `Request failed: ${error.message}`,
-          undefined,
-          error
-        );
+      if (error instanceof Error && error.name === "AbortError") {
+        throw new RequestTimeoutError();
       }
 
-      throw new MonCashError("Unknown error occurred");
+      // Wrap unknown errors
+      throw new MonCashError(
+        error instanceof Error ? error.message : "Unknown error occurred",
+        undefined,
+        error
+      );
     }
   }
 
@@ -129,9 +192,13 @@ class MoncashSDK {
     if (!transactionId.trim())
       throw new MonCashError("TransactionId is required");
 
-    return this.makeRequest<any>(Endpoints.RETRIEVE_TRANSACTION, "POST", {
-      transactionId,
-    });
+    return this.makeRequest<RetrieveTransactionPaymentResponse>(
+      Endpoints.RETRIEVE_TRANSACTION,
+      "POST",
+      {
+        transactionId,
+      }
+    );
   }
 
   async getOrder(orderId: string) {
@@ -155,20 +222,27 @@ class MoncashSDK {
     });
   }
 
-  private encodeSecret(secret: string): string {
-    return btoa(String.fromCharCode(...new TextEncoder().encode(secret)));
+  private isTokenValid(): boolean {
+    if (!this.tokenData) return false;
+    // Add 60 second buffer before expiry
+    // return Date.now() < this.tokenData.expiresAt - 60000;
+    // Reduce buffer to 10 seconds since token life is short
+    return Date.now() < this.tokenData.expiresAt - 10000;
   }
 
   private async getAccessToken(): Promise<string> {
     // Return existing token if it's still valid
-    if (this.accessToken && Date.now() < this.tokenExpiry) {
-      return this.accessToken;
+
+    console.log(this.tokenData, "cachedToken");
+    // Check instance cache first
+    if (this.isTokenValid()) {
+      return this.tokenData!.accessToken;
     }
 
     try {
-      const credentials = this.encodeSecret(
+      const credentials = Buffer.from(
         `${this.config.clientId}:${this.config.clientSecret}`
-      );
+      ).toString("base64");
 
       const response = await fetch(`${this.baseUrl}${Endpoints.TOKEN}`, {
         method: "POST",
@@ -189,13 +263,15 @@ class MoncashSDK {
       }
 
       const data = await response.json();
-      this.accessToken = data.access_token;
-      this.tokenExpiry = Date.now() + data.expires_in * 1000;
 
-      if (!this.accessToken) {
-        throw new MonCashError("Access token is null");
-      }
-      return this.accessToken;
+      const expiresIn = Math.max(data.expires_in, 30) * 1000; // minimum 30 seconds
+
+      this.tokenData = {
+        accessToken: data.access_token,
+        expiresAt: Date.now() + expiresIn,
+      };
+
+      return this.tokenData.accessToken;
     } catch (error) {
       if (error instanceof MonCashError) throw error;
       throw new MonCashError("Failed to get access token", undefined, error);
