@@ -11,7 +11,7 @@ A powerful Node.js/TypeScript SDK for integrating MonCash payment services into 
 - [API Reference](#api-reference)
 - [Methods](#methods)
 - [Error Handling](#error-handling)
-- [Token Caching](#token-caching)
+- [Features](#robust-features)
 
 <!-- ## Installation
 
@@ -191,7 +191,37 @@ sdk
 - `408`: Request timeout
 - Other status codes will be included in the `MonCashError` instance
 
-## Features
+## Robust Features
+
+### 1. Error Handling
+- Custom error types for different scenarios
+- Proper error propagation
+- Specific error classes (OrderNotFoundError, PaymentNotFoundError, etc.)
+- Detailed error messages and status codes
+
+### 2. Token Management
+- Automatic token caching
+- Smart token refresh
+- Expiration handling
+- Efficient request management
+
+### 3. Request Safety
+- Timeout handling
+- Retry mechanism
+- Request validation
+- Proper response parsing
+
+### 4. Security
+- Secure credential handling
+- Base64 encoding using Buffer
+- Proper authorization headers
+- Sandbox/Production mode support
+
+### 5. Type Safety
+- Full TypeScript support
+- Type definitions for all responses
+- Interface definitions for configurations
+- Proper type checking
 
 ### Token Caching
 
