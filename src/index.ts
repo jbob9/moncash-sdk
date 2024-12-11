@@ -1,11 +1,10 @@
-import {
+import type {
   CreatePaymentResponse,
   RetrieveOrderPaymentResponse,
   RetrieveTransactionPaymentResponse,
   TransFerResponse,
 } from "./types";
 
-// Custom error class for MonCash specific errors
 export class MonCashError extends Error {
   constructor(
     message: string,
@@ -232,8 +231,6 @@ class MoncashSDK {
 
   private async getAccessToken(): Promise<string> {
     // Return existing token if it's still valid
-
-    console.log(this.tokenData, "cachedToken");
     // Check instance cache first
     if (this.isTokenValid()) {
       return this.tokenData!.accessToken;
